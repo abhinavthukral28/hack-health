@@ -1,4 +1,5 @@
 import type { InboxMessage } from '../types';
+import { generatedMessages } from './generated';
 
 // ~11 curated synthetic messages shaped from MTSamples-style medical text.
 // Committed as fixtures; they re-seed identically on every load (demo-day rule:
@@ -9,7 +10,7 @@ import type { InboxMessage } from '../types';
 // "message 149" the SME described. Includes a near-duplicate pair (msg-lab-k +
 // msg-lab-k-dup) so dedupe visibly collapses them.
 
-export const messages: InboxMessage[] = [
+export const heroMessages: InboxMessage[] = [
   {
     id: 'msg-consult-derm',
     type: 'specialist_report',
@@ -143,4 +144,21 @@ export const messages: InboxMessage[] = [
     body: '…page 1 of 3 received… [remainder of transmission illegible] …patient name truncated…',
     raw: 'INCOMING FAX — TRANSMISSION ERROR\nPages received: 1 of 3.\nOCR confidence low. Patient identifiers not parseable.',
   },
+];
+
+// Display names for the curated hero patients (synthetic).
+const HERO_NAMES: Record<string, string> = {
+  'pt-synthea-001': 'Margaret Chen',
+  'pt-2271': 'Daniel Cohen',
+  'pt-4410': 'Helen Nguyen',
+  'pt-3098': 'Robert MacDonald',
+  'pt-5521': 'Aisha Khan',
+};
+
+// The full inbox the clinician faces: the curated hero messages (the demo's
+// deep-thread spine) plus ~140 real MTSamples-derived messages. Hero messages
+// are listed first so their ids stay stable for tests.
+export const messages: InboxMessage[] = [
+  ...heroMessages.map((m) => ({ ...m, patientName: m.patientName ?? HERO_NAMES[m.patientId] })),
+  ...generatedMessages,
 ];

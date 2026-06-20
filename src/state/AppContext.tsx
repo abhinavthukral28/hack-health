@@ -9,7 +9,8 @@ import { patient } from '../fixtures/patient';
 // is why every deferred "future spine" module plugs in without touching the shell.
 
 interface Settings {
-  liveAI: boolean;
+  aiTriageOn: boolean; // the AI triage LAYER on/off (before -> after). Distinct from liveAI.
+  liveAI: boolean; // deterministic vs live Claude (future block)
   doNotInterrupt: boolean;
 }
 
@@ -25,6 +26,7 @@ interface AppState {
 
 type Action =
   | { type: 'SELECT_MESSAGE'; id: string | null }
+  | { type: 'TOGGLE_AI_TRIAGE' }
   | { type: 'TOGGLE_DND' }
   | { type: 'TOGGLE_LIVE_AI' }
   | { type: 'APPROVE'; suggestion: Suggestion; task: Task; audit: AuditEntry }
@@ -39,7 +41,9 @@ function initialState(): AppState {
     suggestions: [],
     tasks: [],
     audit: [],
-    settings: { liveAI: false, doNotInterrupt: false },
+    // AI triage starts OFF so the demo opens on the raw inbox ("before"), then
+    // the presenter flips it ON to reveal the stratified queue ("after").
+    settings: { aiTriageOn: false, liveAI: false, doNotInterrupt: false },
     selectedMessageId: null,
   };
 }
@@ -48,6 +52,8 @@ function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SELECT_MESSAGE':
       return { ...state, selectedMessageId: action.id };
+    case 'TOGGLE_AI_TRIAGE':
+      return { ...state, settings: { ...state.settings, aiTriageOn: !state.settings.aiTriageOn } };
     case 'TOGGLE_DND':
       return { ...state, settings: { ...state.settings, doNotInterrupt: !state.settings.doNotInterrupt } };
     case 'TOGGLE_LIVE_AI':

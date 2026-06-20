@@ -56,10 +56,16 @@ export const RULES: Rule[] = [
     id: 'stat-ed',
     match: (m) =>
       hasWord(m, 'stat') ||
-      has(m, 'ed discharge', 'emergency department', 'discharged from emergency', 'within 48h', 'within 48 hours'),
+      has(
+        m,
+        'ed discharge', 'emergency department', 'discharged from emergency',
+        'within 48h', 'within 48 hours',
+        'pulmonary embolism', 'st elevation', 'acute mi', 'acute myocardial',
+        'cord compression', 'active sepsis', 'septic shock',
+      ),
     criticality: 'critical',
     confidence: 'medium',
-    rationale: 'Hospital/ED message with a STAT or time-bound (≤48h) follow-up request. Keyword-driven = medium confidence.',
+    rationale: 'STAT / ED / time-bound or acute-emergency language (e.g. embolism, hemorrhage, sepsis). Keyword-driven = medium confidence.',
   },
   {
     id: 'abnormal-lab',
@@ -69,13 +75,6 @@ export const RULES: Rule[] = [
     rationale: 'Abnormal lab value (flagged H/L) but not a critical threshold — review today.',
   },
   {
-    id: 'imaging-actionable',
-    match: (m) => has(m, 'nodule', 'recommend', 'fleischner', 'follow-up per', 'incidental'),
-    criticality: 'today',
-    confidence: 'medium',
-    rationale: 'Report contains an actionable finding with a recommended follow-up — review today.',
-  },
-  {
     id: 'normal-lab',
     match: (m) => m.type === 'lab' && has(m, 'within normal limits', 'no action required', 'all within normal', 'normal.'),
     criticality: 'can_wait',
@@ -83,20 +82,53 @@ export const RULES: Rule[] = [
     rationale: 'Lab explicitly within normal limits, no action flagged — can wait.',
   },
   {
-    id: 'routine-admin',
-    match: (m) => m.type === 'refill' || m.type === 'fax_form' || (m.type === 'specialist_report' && has(m, 'routine', 'benign', 'reassur', 'prn')),
+    id: 'actionable',
+    match: (m) =>
+      has(
+        m,
+        'recommend', 'biopsy', 'suspicious', 'malignan', 'mass', 'lesion', 'nodule',
+        'fracture', 'abnormal', 'positive for', 'elevated', 'incidental', 'deficiency',
+        'new diagnosis', 'referral', 'fleischner', 'concerning', 'follow-up per',
+      ),
+    criticality: 'today',
+    confidence: 'medium',
+    rationale: 'Report contains an actionable finding or recommended follow-up — review today.',
+  },
+  {
+    id: 'routine',
+    match: (m) =>
+      m.type === 'refill' ||
+      m.type === 'fax_form' ||
+      has(
+        m,
+        'routine', 'benign', 'reassur', 'prn', 'stable', 'unremarkable', 'no acute',
+        'negative', 'well-healed', 'well healed', 'postoperative', 'no significant',
+        'as needed', 'no further', 'tolerated the procedure well',
+      ),
     criticality: 'can_wait',
     confidence: 'medium',
-    rationale: 'Routine administrative or low-acuity message (refill / form / routine consult) — can wait.',
+    rationale: 'Routine / low-acuity message (admin, normal study, stable, or post-op check) — can wait.',
   },
 ];
+
+// Recognized clinical document with no urgent/abnormal/actionable signal. Parked
+// as routine, but LOW confidence — honest: the AI thinks it can wait, the human
+// can still glance. This keeps Needs review rare (truly unclassifiable only).
+const DEFAULT_RULE = {
+  id: 'routine-default',
+  criticality: 'can_wait' as Criticality,
+  confidence: 'low' as Confidence,
+  rationale: 'Recognized clinical document with no critical, abnormal, or actionable signal detected — parked as routine at low confidence; clinician may still review.',
+};
 
 const FALLBACK_RULE = {
   id: 'needs-review',
   criticality: 'needs_review' as Criticality,
   confidence: 'low' as Confidence,
-  rationale: 'No rule matched confidently (e.g. unreadable/partial transmission). Routed to Needs review rather than guessed — never crash.',
+  rationale: 'Could not be parsed/classified (e.g. unreadable or partial transmission). Routed to Needs review rather than guessed — never crash.',
 };
+
+const KNOWN_TYPES: InboxMessage['type'][] = ['lab', 'specialist_report', 'hospital_report', 'fax_form', 'refill'];
 
 // Explicit unreadable detection routes to needs_review even if a stray keyword hits.
 const isUnreadable = (m: InboxMessage): boolean =>
@@ -105,15 +137,15 @@ const isUnreadable = (m: InboxMessage): boolean =>
 export function classify(msg: InboxMessage) {
   if (isUnreadable(msg)) return FALLBACK_RULE;
   const rule = RULES.find((r) => r.match(msg));
-  return rule ?? FALLBACK_RULE;
+  if (rule) return rule;
+  // No rule fired: a recognized document type is routine-by-default, not unclassifiable.
+  return KNOWN_TYPES.includes(msg.type) ? DEFAULT_RULE : FALLBACK_RULE;
 }
 
 // Templated one-line summaries — within each bucket, give the clinician the gist.
 function summarize(msg: InboxMessage, criticality: Criticality): string {
   const firstSentence = msg.body.split(/(?<=[.!])\s/)[0].trim();
   switch (criticality) {
-    case 'critical':
-      return `⚠ ${firstSentence}`;
     case 'needs_review':
       return `Could not classify — ${firstSentence}`;
     default:
@@ -139,8 +171,8 @@ function buildSourceDoc(msg: InboxMessage, patient: Patient): ClinicalDocument {
   const org = ORG_BY_TYPE[msg.type];
   const isBackbone = msg.patientId === patient.id;
   const demographics = isBackbone
-    ? { name: patient.name, dob: patient.dob, mrn: patient.id }
-    : { name: 'Synthetic Patient', dob: '—', mrn: msg.patientId };
+    ? { name: patient.name, dob: patient.dob, mrn: patient.id, healthCard: patient.healthCard }
+    : { name: msg.patientName ?? 'Synthetic Patient', dob: '—', mrn: msg.patientId };
 
   if (msg.type === 'lab' && msg.labReport) {
     return {

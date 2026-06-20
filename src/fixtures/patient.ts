@@ -11,6 +11,7 @@ export const patient: Patient = {
   id: 'pt-synthea-001',
   name: 'Margaret Chen',
   dob: '1951-03-14', // 75 yo
+  healthCard: '4815-672-093-XA', // OHIP-style (synthetic)
   problems: [
     'Chronic kidney disease, stage 3 (N18.3)',
     'Hypertension (I10)',

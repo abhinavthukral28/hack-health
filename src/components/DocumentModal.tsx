@@ -40,10 +40,11 @@ function Letterhead({ doc }: { doc: ClinicalDocument }) {
 
 function DemographicsBlock({ doc }: { doc: ClinicalDocument }) {
   if (!doc.patient) return null;
-  const fields = [
+  const fields: [string, string][] = [
     ['Patient', doc.patient.name],
     ['DOB', doc.patient.dob],
     ['MRN', doc.patient.mrn ?? '—'],
+    ...(doc.patient.healthCard ? ([['Health card (OHIP)', doc.patient.healthCard]] as [string, string][]) : []),
     ...(doc.meta ?? []).map((m) => [m.label, m.value] as [string, string]),
   ];
   return (

@@ -19,6 +19,7 @@ export interface InboxMessage {
   type: MessageType;
   receivedAt: string; // ISO
   patientId: string;
+  patientName?: string; // display name for the inbox row / document demographics
   subject: string;
   body: string;
   raw?: string; // raw source doc (lab table text, consult note) for the evidence panel
@@ -40,7 +41,7 @@ export interface ClinicalDocument {
   org: string; // letterhead organization
   orgMeta?: string; // address / accreditation line
   docTitle: string;
-  patient?: { name: string; dob: string; mrn?: string };
+  patient?: { name: string; dob: string; mrn?: string; healthCard?: string };
   meta?: { label: string; value: string }[]; // collected / reported / ordering provider
   labRows?: LabRow[]; // for kind: 'lab'
   bodyText?: string; // for kind: 'note'
@@ -109,6 +110,7 @@ export interface Patient {
   id: string;
   name: string;
   dob: string;
+  healthCard?: string; // OHIP-style health card number
   problems: string[];
   medications: string[];
   recentObs: { label: string; value: string; flag?: 'H' | 'L' | 'critical' }[];
