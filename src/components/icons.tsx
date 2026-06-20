@@ -73,3 +73,19 @@ export const Sparkles = ({ className }: IconProps) => (
     <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8Z" />
   </svg>
 );
+
+export const Pencil = ({ className }: IconProps) => (
+  <svg {...base(className)}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
+export const ClipboardList = ({ className }: IconProps) => (
+  <svg {...base(className)}>
+    <rect x="8" y="2" width="8" height="4" rx="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M9 12h6" />
+    <path d="M9 16h6" />
+  </svg>
+);

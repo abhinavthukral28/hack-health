@@ -1,8 +1,10 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react';
-import type { TriagedMessage, Suggestion, Task, AuditEntry, Patient } from '../types';
+import type { TriagedMessage, Task, AuditEntry, Patient } from '../types';
 import { deterministicEngine } from '../engine/deterministic';
 import { messages } from '../fixtures/messages';
 import { patient } from '../fixtures/patient';
+
+type SuggestionStatus = 'pending' | 'approved' | 'edited' | 'rejected';
 
 // One AppContext, reducer-shaped, zero deps — boring by default.
 // The approve flow being reducer-shaped is what keeps it clean + testable, and
@@ -17,9 +19,14 @@ interface Settings {
 interface AppState {
   patient: Patient;
   triaged: TriagedMessage[];
-  suggestions: Suggestion[];
   tasks: Task[];
-  audit: AuditEntry[];
+  audit: AuditEntry[]; // newest first
+  // Per-suggestion approval status, keyed by suggestion id (suggestions are
+  // computed on demand from the selected message, so we track status here).
+  actionStatus: Record<string, SuggestionStatus>;
+  // Clinician's own free-text notes, keyed by message id — added alongside the
+  // AI triage/suggestions. The human's voice next to the AI's.
+  notes: Record<string, string>;
   settings: Settings;
   selectedMessageId: string | null;
 }
@@ -29,18 +36,19 @@ type Action =
   | { type: 'TOGGLE_AI_TRIAGE' }
   | { type: 'TOGGLE_DND' }
   | { type: 'TOGGLE_LIVE_AI' }
-  | { type: 'APPROVE'; suggestion: Suggestion; task: Task; audit: AuditEntry }
-  | { type: 'EDIT'; suggestionId: string; audit: AuditEntry }
-  | { type: 'REJECT'; suggestionId: string; audit: AuditEntry };
+  | { type: 'APPROVE_SUGGESTION'; suggestionId: string; tasks: Task[]; audits: AuditEntry[] }
+  | { type: 'REJECT_SUGGESTION'; suggestionId: string; audit: AuditEntry }
+  | { type: 'SET_NOTE'; messageId: string; text: string };
 
 // Fixtures re-seed identically on every load (demo-day rule: refresh resets the pile).
 function initialState(): AppState {
   return {
     patient,
     triaged: deterministicEngine.triage(messages, patient),
-    suggestions: [],
     tasks: [],
     audit: [],
+    actionStatus: {},
+    notes: {},
     // AI triage starts OFF so the demo opens on the raw inbox ("before"), then
     // the presenter flips it ON to reveal the stratified queue ("after").
     settings: { aiTriageOn: false, liveAI: false, doNotInterrupt: false },
@@ -58,31 +66,21 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, settings: { ...state.settings, doNotInterrupt: !state.settings.doNotInterrupt } };
     case 'TOGGLE_LIVE_AI':
       return { ...state, settings: { ...state.settings, liveAI: !state.settings.liveAI } };
-    case 'APPROVE':
+    case 'APPROVE_SUGGESTION':
       return {
         ...state,
-        tasks: [...state.tasks, action.task],
-        audit: [action.audit, ...state.audit],
-        suggestions: state.suggestions.map((s) =>
-          s.id === action.suggestion.id ? { ...s, status: 'approved' } : s,
-        ),
+        tasks: [...state.tasks, ...action.tasks],
+        audit: [...action.audits, ...state.audit],
+        actionStatus: { ...state.actionStatus, [action.suggestionId]: 'approved' },
       };
-    case 'EDIT':
-      return {
-        ...state,
-        audit: [action.audit, ...state.audit],
-        suggestions: state.suggestions.map((s) =>
-          s.id === action.suggestionId ? { ...s, status: 'edited' } : s,
-        ),
-      };
-    case 'REJECT':
+    case 'REJECT_SUGGESTION':
       return {
         ...state,
         audit: [action.audit, ...state.audit],
-        suggestions: state.suggestions.map((s) =>
-          s.id === action.suggestionId ? { ...s, status: 'rejected' } : s,
-        ),
+        actionStatus: { ...state.actionStatus, [action.suggestionId]: 'rejected' },
       };
+    case 'SET_NOTE':
+      return { ...state, notes: { ...state.notes, [action.messageId]: action.text } };
     default:
       return state;
   }

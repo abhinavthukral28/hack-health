@@ -1,9 +1,16 @@
-import { useState } from 'react';
-import type { TriagedMessage, EvidenceRef } from '../types';
+import { useEffect, useState } from 'react';
+import type { TriagedMessage, EvidenceRef, Suggestion, ProposedAction } from '../types';
 import { ConfidenceMeter } from './TriageBadge';
 import { bucketConfig } from './criticality';
 import { DocumentModal } from './DocumentModal';
+import { SuggestionCard } from './SuggestionCard';
+import { AuditTrail } from './AuditTrail';
+import { ClinicianNotes } from './ClinicianNotes';
 import { FileText, User, Pill, Sparkles } from './icons';
+import { useApp } from '../state/AppContext';
+import { deterministicEngine } from '../engine/deterministic';
+import { analyzeWithClaude } from '../engine/claude';
+import { approveSuggestion, makeAuditEntry } from '../state/actionQueue';
 
 const SourceIcon = ({ type, className }: { type: EvidenceRef['sourceType']; className?: string }) => {
   if (type === 'fhir') return <User className={className} />;
@@ -44,7 +51,41 @@ function EvidenceCard({ ev, onOpen }: { ev: EvidenceRef; onOpen: () => void }) {
 }
 
 export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
+  const { state, dispatch } = useApp();
+  const { patient, settings, actionStatus, tasks, audit, notes } = state;
   const [openDoc, setOpenDoc] = useState<EvidenceRef | null>(null);
+
+  // Deep-thread suggestion for the selected message. Deterministic is synchronous;
+  // live AI is async (overlays Claude's summary+drafts, silently falls back).
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const messageId = triaged?.message.id ?? null;
+
+  useEffect(() => {
+    if (!triaged) {
+      setSuggestion(null);
+      return;
+    }
+    const msg = triaged.message;
+    if (settings.liveAI) {
+      let cancelled = false;
+      setDrafting(true);
+      setSuggestion(null);
+      analyzeWithClaude(msg, patient).then((s) => {
+        if (!cancelled) {
+          setSuggestion(s);
+          setDrafting(false);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setSuggestion(deterministicEngine.analyze(msg, patient));
+    setDrafting(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageId, settings.liveAI]);
+
   if (!triaged) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-8 text-center">
@@ -59,6 +100,22 @@ export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
   }
 
   const cfg = bucketConfig(triaged.criticality);
+  const status = suggestion ? actionStatus[suggestion.id] ?? 'pending' : 'pending';
+
+  const handleApprove = (editedActions: ProposedAction[]) => {
+    if (!suggestion) return;
+    const { tasks: newTasks, audits } = approveSuggestion(suggestion, editedActions);
+    dispatch({ type: 'APPROVE_SUGGESTION', suggestionId: suggestion.id, tasks: newTasks, audits });
+  };
+
+  const handleReject = () => {
+    if (!suggestion) return;
+    dispatch({
+      type: 'REJECT_SUGGESTION',
+      suggestionId: suggestion.id,
+      audit: makeAuditEntry({ actor: 'Clinician', action: `Rejected draft: ${suggestion.title}`, targetId: suggestion.id }),
+    });
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -94,6 +151,36 @@ export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
               <EvidenceCard key={i} ev={ev} onOpen={() => setOpenDoc(ev)} />
             ))}
           </div>
+        </div>
+
+        {/* The differentiator: AI-drafted actions the clinician edits + approves */}
+        {drafting ? (
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-600 motion-reduce:animate-none" />
+            Drafting actions with live AI…
+          </div>
+        ) : (
+          suggestion && (
+            <SuggestionCard
+              suggestion={suggestion}
+              status={status}
+              onApprove={handleApprove}
+              onReject={handleReject}
+            />
+          )
+        )}
+
+        {/* The clinician's own notes — their voice alongside the AI's */}
+        <ClinicianNotes
+          value={notes[triaged.message.id] ?? ''}
+          onChange={(text) => dispatch({ type: 'SET_NOTE', messageId: triaged.message.id, text })}
+        />
+
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Filed for this patient
+          </div>
+          <AuditTrail tasks={tasks} audit={audit} />
         </div>
       </div>
 

@@ -1,11 +1,16 @@
+import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { TriagedInbox } from './TriagedInbox';
 import { EvidencePanel } from './EvidencePanel';
+import { TasksView } from './TasksView';
 import { DndToggle } from './DndToggle';
 import { AiTriageToggle } from './AiTriageToggle';
+import { LiveAiToggle } from './LiveAiToggle';
 import { RawInboxList } from './RawInboxList';
 import { Sparkles } from './icons';
 import { messages } from '../fixtures/messages';
+
+type Module = 'inbox' | 'tasks';
 
 // Generic Canadian family-practice EMR. The product brand here is the *clinic's*
 // system — COMPASS is demoted to an embedded AI panel ("powered by COMPASS").
@@ -15,25 +20,29 @@ const PROVIDER = 'Dr. A. Okafor, MD CCFP';
 const TODAY = '20 Jun 2026';
 const INBOX_TOTAL_TODAY = messages.length;
 
-// Familiar EMR modules. Only Inbox is wired — the rest are present so it reads
-// as a whole EMR, with AI living inside one part of it.
-const NAV = [
-  { icon: '📅', label: 'Schedule' },
-  { icon: '👥', label: 'Patients' },
-  { icon: '📥', label: 'Inbox', active: true, badge: INBOX_TOTAL_TODAY },
-  { icon: '🧪', label: 'Labs' },
-  { icon: '✓', label: 'Tasks' },
-  { icon: '🧾', label: 'Billing' },
-  { icon: '📊', label: 'Reports' },
+// Familiar EMR modules. Inbox + Tasks are wired; the rest are present so it reads
+// as a whole EMR, with AI living inside it.
+const NAV: { key: Module | null; icon: string; label: string }[] = [
+  { key: null, icon: '📅', label: 'Schedule' },
+  { key: null, icon: '👥', label: 'Patients' },
+  { key: 'inbox', icon: '📥', label: 'Inbox' },
+  { key: null, icon: '🧪', label: 'Labs' },
+  { key: 'tasks', icon: '✓', label: 'Tasks' },
+  { key: null, icon: '🧾', label: 'Billing' },
+  { key: null, icon: '📊', label: 'Reports' },
 ];
 
 export function EmrShell() {
   const { state, dispatch } = useApp();
-  const { triaged, selectedMessageId, settings } = state;
+  const { triaged, selectedMessageId, settings, tasks } = state;
   const aiOn = settings.aiTriageOn;
+  const [activeModule, setActiveModule] = useState<Module>('inbox');
 
   const selected = triaged.find((t) => t.message.id === selectedMessageId) ?? null;
   const criticalCount = triaged.filter((t) => t.criticality === 'critical' && !t.duplicateOf).length;
+
+  const badgeFor = (key: Module | null): number | null =>
+    key === 'inbox' ? INBOX_TOTAL_TODAY : key === 'tasks' ? tasks.length : null;
 
   return (
     <div className="flex h-screen bg-slate-100 text-slate-900">
@@ -46,24 +55,38 @@ export function EmrShell() {
           <span className="text-sm font-semibold text-slate-700">MapleChart</span>
         </div>
         <div className="flex-1 py-2">
-          {NAV.map((item) => (
-            <div
-              key={item.label}
-              className={`mx-2 flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
-                item.active
-                  ? 'bg-indigo-50 font-semibold text-indigo-700'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span aria-hidden>{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
-              {item.badge && (
-                <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                  {item.badge}
-                </span>
-              )}
-            </div>
-          ))}
+          {NAV.map((item) => {
+            const interactive = item.key !== null;
+            const active = item.key === activeModule;
+            const badge = badgeFor(item.key);
+            return (
+              <button
+                key={item.label}
+                type="button"
+                disabled={!interactive}
+                onClick={() => item.key && setActiveModule(item.key)}
+                className={`mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors duration-150 motion-reduce:transition-none ${
+                  active
+                    ? 'bg-indigo-50 font-semibold text-indigo-700'
+                    : interactive
+                      ? 'cursor-pointer text-slate-600 hover:bg-slate-50'
+                      : 'cursor-default text-slate-400'
+                }`}
+              >
+                <span aria-hidden>{item.icon}</span>
+                <span className="flex-1 text-left">{item.label}</span>
+                {badge !== null && badge > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      active ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <div className="border-t border-slate-200 px-4 py-3 text-[11px] text-slate-400">
           {CLINIC}
@@ -76,7 +99,7 @@ export function EmrShell() {
           <div className="text-sm text-slate-500">
             <span className="font-semibold text-slate-700">{CLINIC}</span>
             <span className="mx-2 text-slate-300">›</span>
-            Provider Inbox
+            Provider {activeModule === 'tasks' ? 'Tasks' : 'Inbox'}
           </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-400">{TODAY}</span>
@@ -88,6 +111,9 @@ export function EmrShell() {
           </div>
         </header>
 
+        {activeModule === 'tasks' ? (
+          <TasksView />
+        ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_400px] overflow-hidden">
           {/* Inbox */}
           <main className="flex min-h-0 flex-col overflow-hidden">
@@ -111,6 +137,7 @@ export function EmrShell() {
               </div>
               <div className="flex items-center gap-2">
                 {aiOn && <DndToggle />}
+                {aiOn && <LiveAiToggle />}
                 <AiTriageToggle />
               </div>
             </div>
@@ -143,7 +170,7 @@ export function EmrShell() {
                 <EvidencePanel triaged={selected} />
               ) : (
                 <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                  <div className="text-4xl">✦</div>
+                  <Sparkles className="h-8 w-8 text-slate-300" />
                   <p className="mt-3 text-sm font-semibold text-slate-600">AI Triage is off</p>
                   <p className="mt-1 text-xs text-slate-400">
                     Turn it on to rank, dedupe and summarize today's {INBOX_TOTAL_TODAY} messages —
@@ -160,6 +187,7 @@ export function EmrShell() {
             </div>
           </aside>
         </div>
+        )}
       </div>
     </div>
   );
