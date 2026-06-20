@@ -55,6 +55,9 @@ const ACTION_META: Record<
 > = {
   patient_message: { label: 'Patient message', Icon: MessageSquare },
   followup_task: { label: 'Follow-up task', Icon: CalendarCheck },
+  request_info: { label: 'Request info from referrer', Icon: MessageSquare },
+  acknowledge: { label: 'Accept referral', Icon: CalendarCheck },
+  decline_redirect: { label: 'Decline / redirect', Icon: MessageSquare },
 };
 
 // Presentational. The AI has DRAFTED the actions; the clinician edits a line,

@@ -10,6 +10,7 @@ const TYPE_LABEL: Record<InboxMessage['type'], string> = {
   hospital_report: 'Hospital',
   fax_form: 'Fax / form',
   refill: 'Refill',
+  referral_in: 'Referral',
 };
 
 const time = (iso: string) =>

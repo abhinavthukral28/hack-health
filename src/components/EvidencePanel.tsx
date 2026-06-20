@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { TriagedMessage, EvidenceRef, Suggestion, ProposedAction } from '../types';
+import type { TriagedMessage, EvidenceRef, Suggestion, ProposedAction, ReferralDisposition } from '../types';
 import { ConfidenceMeter } from './TriageBadge';
 import { bucketConfig } from './criticality';
 import { DocumentModal } from './DocumentModal';
@@ -10,6 +10,7 @@ import { FileText, User, Pill, Sparkles } from './icons';
 import { useApp } from '../state/AppContext';
 import { deterministicEngine } from '../engine/deterministic';
 import { analyzeWithClaude } from '../engine/claude';
+import { assessReferral } from '../engine/referral';
 import { approveSuggestion, makeAuditEntry } from '../state/actionQueue';
 
 const SourceIcon = ({ type, className }: { type: EvidenceRef['sourceType']; className?: string }) => {
@@ -50,6 +51,87 @@ function EvidenceCard({ ev, onOpen }: { ev: EvidenceRef; onOpen: () => void }) {
   );
 }
 
+const REF_LABEL: Record<ReferralDisposition['status'], string> = {
+  needs_info: 'Needs info',
+  decline_redirect: 'Decline / redirect',
+  accept: 'Accept',
+};
+const REF_BADGE: Record<ReferralDisposition['status'], string> = {
+  needs_info: 'border-amber-300 bg-amber-50 text-amber-800',
+  decline_redirect: 'border-slate-300 bg-slate-200/60 text-slate-700',
+  accept: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+};
+
+// Reuse the existing SuggestionCard + approval flow for referrals by mapping a
+// ReferralDisposition onto the Suggestion shape. The fired intake rule becomes
+// the rationale; the drafted response becomes the proposed action.
+function referralToSuggestion(triaged: TriagedMessage, disp: ReferralDisposition): Suggestion {
+  const msg = triaged.message;
+  const label =
+    disp.status === 'needs_info' ? 'NEEDS INFO' : disp.status === 'decline_redirect' ? 'DECLINE / REDIRECT' : 'ACCEPT';
+  return {
+    id: `ref-${msg.id}`,
+    messageId: msg.id,
+    patientId: msg.patientId,
+    title: msg.subject,
+    summary: disp.firedRule ? `${label} — ${disp.firedRule.reason}` : `${label} — meets intake criteria`,
+    rationale: disp.firedRule?.reason ?? 'Meets the practice intake criteria — accept.',
+    evidence: triaged.evidence,
+    confidence: disp.confidence,
+    proposedActions: disp.proposedActions,
+    status: 'pending',
+  };
+}
+
+// The self-learning loop, made tangible (and honest): the practice's intake
+// rules are explicit and editable. A clinician adds a rule; it appears in the
+// list and the engine checks every future referral against it. The intelligence
+// surfaces candidate rules; authority stays human. Never a black box.
+function PracticeRulesCard() {
+  const { state, dispatch } = useApp();
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const label = draft.trim();
+    if (!label) return;
+    dispatch({ type: 'ADD_INTAKE_RULE', label });
+    setDraft('');
+  };
+  return (
+    <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
+      <div className="text-xs font-bold uppercase tracking-wide text-indigo-700">
+        Practice intake rules ({state.practiceRules.length})
+      </div>
+      <p className="mt-0.5 text-[11px] leading-snug text-indigo-700/70">
+        Every referral is checked against these. Clinicians add rules as they go — the list compounds. That accumulated
+        judgement is the moat a base model doesn't have.
+      </p>
+      <ul className="mt-2 space-y-1">
+        {state.practiceRules.map((r, i) => (
+          <li key={i} className="flex gap-1.5 text-xs text-slate-700">
+            <span className="shrink-0 text-indigo-400">▸</span>
+            <span>{r}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2.5 flex gap-1.5">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+          placeholder="Teach the system a new intake rule…"
+          className="min-w-0 flex-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        />
+        <button
+          onClick={add}
+          className="shrink-0 cursor-pointer rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        >
+          Add rule
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
   const { state, dispatch } = useApp();
   const { patient, settings, actionStatus, tasks, audit, notes } = state;
@@ -67,6 +149,12 @@ export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
       return;
     }
     const msg = triaged.message;
+    if (msg.type === 'referral_in') {
+      // Referrals are assessed deterministically against the practice intake rules.
+      setSuggestion(referralToSuggestion(triaged, assessReferral(msg)));
+      setDrafting(false);
+      return;
+    }
     if (settings.liveAI) {
       let cancelled = false;
       setDrafting(true);
@@ -100,6 +188,8 @@ export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
   }
 
   const cfg = bucketConfig(triaged.criticality);
+  const refDisp: ReferralDisposition | null =
+    triaged.message.type === 'referral_in' ? assessReferral(triaged.message) : null;
   const status = suggestion ? actionStatus[suggestion.id] ?? 'pending' : 'pending';
 
   const handleApprove = (editedActions: ProposedAction[]) => {
@@ -135,6 +225,20 @@ export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         <ConfidenceMeter confidence={triaged.confidence} />
 
+        {refDisp && (
+          <div className={`rounded-lg border px-3 py-2.5 ${REF_BADGE[refDisp.status]}`}>
+            <div className="text-xs font-bold uppercase tracking-wide">
+              Referral disposition: {REF_LABEL[refDisp.status]}
+            </div>
+            {refDisp.firedRule && <div className="mt-1 text-sm leading-snug">{refDisp.firedRule.reason}</div>}
+            <div className="mt-1.5 text-[11px] opacity-80">
+              Checked against the practice's intake rules. AI prepares the response; you approve. Never auto-acted.
+            </div>
+          </div>
+        )}
+
+        {refDisp && <PracticeRulesCard />}
+
         <div className="rounded-lg bg-slate-800 p-3 text-sm text-slate-100">
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
             Why the AI ranked it here
@@ -162,6 +266,7 @@ export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
         ) : (
           suggestion && (
             <SuggestionCard
+              key={suggestion.id}
               suggestion={suggestion}
               status={status}
               onApprove={handleApprove}

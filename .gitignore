@@ -14,4 +14,5 @@ data/raw/
 # Throwaway browser/QA artifacts
 .playwright-mcp/
 compass-*.png
+referral*.png
 .gstack/

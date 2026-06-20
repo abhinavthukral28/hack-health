@@ -3,6 +3,7 @@ import type { TriagedMessage, Task, AuditEntry, Patient } from '../types';
 import { deterministicEngine } from '../engine/deterministic';
 import { messages } from '../fixtures/messages';
 import { patient } from '../fixtures/patient';
+import { intakeRules } from '../fixtures/intakeRules';
 
 type SuggestionStatus = 'pending' | 'approved' | 'edited' | 'rejected';
 
@@ -29,6 +30,9 @@ interface AppState {
   notes: Record<string, string>;
   settings: Settings;
   selectedMessageId: string | null;
+  // The practice's intake rules — the context layer. Clinicians add rules as they
+  // go; the list compounds. This is the visible half of the self-learning loop.
+  practiceRules: string[];
 }
 
 type Action =
@@ -38,7 +42,8 @@ type Action =
   | { type: 'TOGGLE_LIVE_AI' }
   | { type: 'APPROVE_SUGGESTION'; suggestionId: string; tasks: Task[]; audits: AuditEntry[] }
   | { type: 'REJECT_SUGGESTION'; suggestionId: string; audit: AuditEntry }
-  | { type: 'SET_NOTE'; messageId: string; text: string };
+  | { type: 'SET_NOTE'; messageId: string; text: string }
+  | { type: 'ADD_INTAKE_RULE'; label: string };
 
 // Fixtures re-seed identically on every load (demo-day rule: refresh resets the pile).
 function initialState(): AppState {
@@ -53,6 +58,7 @@ function initialState(): AppState {
     // the presenter flips it ON to reveal the stratified queue ("after").
     settings: { aiTriageOn: false, liveAI: false, doNotInterrupt: false },
     selectedMessageId: null,
+    practiceRules: intakeRules.map((r) => r.label),
   };
 }
 
@@ -81,6 +87,10 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'SET_NOTE':
       return { ...state, notes: { ...state.notes, [action.messageId]: action.text } };
+    case 'ADD_INTAKE_RULE':
+      return state.practiceRules.includes(action.label)
+        ? state
+        : { ...state, practiceRules: [...state.practiceRules, action.label] };
     default:
       return state;
   }

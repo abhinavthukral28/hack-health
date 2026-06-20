@@ -1,5 +1,11 @@
 # hack-health — Design Doc
 
+> **Build status (2026-06-20): COMPLETE — implements this design doc.** Hero stratified-triage inbox (Critical now / Today / Can wait / Needs review) + tap-to-source evidence + deep-thread draft→edit→approve→audit + live-AI toggle (OpenRouter, silent deterministic fallback) + Tasks tab + Clinician Notes. Code review: clean (0 critical; trust boundary correct, enum-complete). Deterministic deep-thread drafts are value-specific; lab classifier hardened to structured flags.
+>
+> **+ Referral intelligence SHIPPED (15:28):** inbound referral triage (`referral_in`) with the clinician-sourced cancer intake rule (bloods + CT), a **Needs info** disposition + a drafted request-for-info routed through the existing approve→audit flow, and the self-learning **"add an intake rule"** gesture (the practice rules list compounds live). Additive — triage hero untouched. **16/16 tests, tsc + production build clean.** Visual eyeball pending (local browser was locked during build).
+
+
+
 **Event:** AI in Healthcare Co-Design Hackathon · June 20, 2026 · Invest Ottawa
 **Session goal:** Win the 6pm demo with one sharp workflow that is also the credible first step of a real clinical pilot ("wedge that scales").
 **Mode:** Builder/Hackathon with startup-grade rigor on demand + feasibility.
@@ -270,3 +276,115 @@ src/
 In-memory, synchronous, 10-12 messages — no perf concern. Only `claudeEngine.analyze` is async: spinner on that one card, ~3s timeout, fallback. Never blocks the inbox render.
 
 **Eng verdict:** Architecture locked. Boring, testable, swap-friendly. The Context+reducer + single AiEngine interface mean every deferred module ("future spine") plugs in without touching the shell. Build foundation -> hero -> differentiator in that order. Ready to implement.
+
+---
+
+## SME insight #2 — referrals are the real moat (post-build, 2026-06-20)
+
+A second clinician, asked "this triage seems simple — why hasn't it been done?", named the actual hard problem:
+
+> "It gets very complicated with **referrals**. Some clinics don't accept some kinds of referrals; each clinic has its own way of accepting or declining. Every referral has to be studied. Sometimes a referral gets **declined 10 days after** it was received. The filter has to be more issue-based — 'referral likely to be declined.' You have to **give the model context** so it can filter better. That's why this hasn't been done."
+
+**What this means for the product (do NOT rebuild today — this reframes the pitch and the roadmap):**
+
+1. **The triage we built is the tractable slice; it is NOT the moat.** Lab/result acuity is mechanically classifiable. The unsolved core is **referral disposition** — per-clinic, undocumented, idiosyncratic acceptance rules, with a decline that lands days late. That's the same wound as our opener (silent failure + lost time), in a second domain.
+2. **The moat is the accumulated per-clinic referral-acceptance context** — a knowledge layer that compounds with use and is hard to copy. That's what makes this a company, not a feature.
+3. **Our architecture is already the right shape for it.** "Referral likely to be declined" drops into the existing `Suggestion` contract: classify disposition → surface the clinic rule that fired → draft the fix/resubmission → human approves. Same panel, same approval flow, plus a per-clinic rule/context layer. We don't pretend the model knows — we encode the rules, show the reasoning, keep the human in control. That's the honest answer to "naive LLMs filter referrals badly," and it's our strongest line with skeptical clinician judges.
+
+**Pitch upgrades (use at 6pm):**
+- **Second anecdote** that rhymes with the opener: "a referral silently declined 10 days later." Two wounds, one cause — the inbox has no intelligence about *disposition*.
+- **Answer to "isn't triage easy?":** results triage is tractable; **referral intelligence is the hard, unsolved core, and our architecture is built for it.** Position the demo as the wedge that earns the right to build the hard part — with the per-clinic context layer as exactly what clinician co-design produces.
+- **Promote referral intelligence** from "one of six future-spine modules" to **the named, highest-value, most-defensible next build.**
+- **Do not oversell** triage as the whole solution. The honest framing scores higher on every judging axis.
+
+---
+
+## Feature design — Referral Intelligence (inbound referral triage)
+
+**Reframe (per the build team):** the SME's pain is the *receiving* side — referrals **arrive** in the inbox, each must be studied against the practice's own intake criteria, and the disposition crawls out ~10 days *after it was received*. This is not an outbound compose tool. An inbound referral is **just another item in the 150-message pile** — the inbox already owes it a disposition. So this triages like everything else, with referral-specific logic. Stronger fit: it lives inside the inbox we already built.
+
+**Goal:** when an inbound referral lands, the AI assigns a **disposition on arrival** — Accept / Needs info / Decline-or-redirect — against the practice's intake rules, shows the rule it applied, and drafts the response (acknowledge, request the missing item from the referrer, or a decline-with-redirect note). Disposition the day it arrives, not 10 days later.
+
+**Hard constraint: purely additive.** New message type + intake-rules fixture + assessment; reuse the existing card/evidence/approval/audit. Triage engine, buckets, and hero untouched. If it can't be additive, cut it.
+
+### Pressure-test refinements (locked)
+- **Hero disposition = `needs_info`, not `decline`.** It's the literal antidote to the SME's wound ("would've been declined in 10 days — so we ask for the missing item on day zero"), it's pure assist, and it carries none of the "AI is rejecting referrals" liability that a clinician panel will push on.
+- **Hero scenario is high-stakes:** an **urgent** referral (suspected-cancer / 2-week-wait pathway) missing required imaging. A bounce here = *delayed diagnosis*, matching the harm register of the lab-unseen opener — not "admin waste."
+- **Safety asymmetry → bias to needs-info/route-to-human.** A false `needs_info` just asks a question; a false `decline` can harm a patient. `decline_redirect` is a *recommendation only*, always human-gated, never auto-acted. When unsure, the engine routes to the human, it does not decline.
+- **Honest moat framing.** Don't claim "3 rules = a moat." Claim the *mechanism + compounding*: the intake rules are explicit, auditable, and editable by the practice, and they accumulate — the context a base model doesn't have. **Field note (2026-06-20):** a clinician could only give a *high-level* filter off the top of their head ("cancer referral needs bloods + a CT or the appointment's useless"). That coarseness IS the thesis — the detailed per-clinic acceptance logic lives in people's heads and isn't written down anywhere; the product makes it explicit and lets it compound. We're not transcribing a rulebook that exists, we're building the one that doesn't.
+- **One crisp beat (~30s).** One referral, one disposition, one drafted request. No separate referrals tab; resist showing all three dispositions on stage.
+
+### Data model (additive to `types.ts`)
+```ts
+type MessageType = ... | 'referral_in';        // an inbound referral request
+interface InboxMessage { ...; referral?: InboundReferral }
+
+interface InboundReferral {
+  fromProvider: string;        // 'Dr. Patel, Bytown Walk-in Clinic'
+  requestedService: string;    // 'ongoing diabetes management'
+  reason: string;
+  enclosed: string[];          // what the referrer attached: ['recent A1c']
+  patientPostalCode?: string;  // for catchment checks
+}
+
+// The CONTEXT LAYER = OUR practice's own intake criteria (the moat — one set,
+// the knowledge that compounds and that a base model doesn't have).
+interface IntakeRule {
+  id: string; label: string;            // 'New diabetes referral requires a recent A1c (<3mo)'
+  check: (r: InboundReferral) => boolean;   // true = satisfied
+  onFail: 'needs_info' | 'decline_redirect';
+  reason: string;                       // shown when it fails
+  redirectTo?: string;                  // for decline_redirect: 'Endocrinology, Riverside'
+}
+
+interface ReferralDisposition {
+  status: 'accept' | 'needs_info' | 'decline_redirect';
+  confidence: Confidence;
+  firedRule?: { label: string; reason: string };
+  redirectTo?: string;
+  proposedActions: ProposedAction[];    // 'acknowledge' | 'request_info' | 'decline_redirect'
+}
+```
+
+### Engine (additive — does NOT change `classify`/`triage`)
+`assessReferral(message, intakeRules): ReferralDisposition` — deterministic, first-fail-wins:
+1. Run the practice's `intakeRules` against the inbound referral.
+2. First rule that fails → its `onFail` status (`needs_info` or `decline_redirect`) + the reason; if none fail → `accept`.
+3. Draft the matching response: acknowledge / request-the-missing-item-from-referrer / decline-with-redirect note. The fired rule **is** the rationale shown in the evidence panel — same pattern as triage. Live-AI overlay optional (Claude phrases it; deterministic owns the disposition).
+
+### UI (additive)
+- `referral_in` messages render in the inbox with a **disposition badge** (green Accept / amber Needs info / slate Decline→redirect). They slot into the triage buckets naturally (a needs-info referral → Today).
+- Selecting one opens the disposition in the **existing** right panel — reuse `SuggestionCard` + `EvidencePanel` + `ApprovalModal` + `AuditTrail`. The evidence "source" is the **practice intake rule** that fired (the context layer, made visible — the moat on screen).
+- Approve → files the drafted response as a `Task` + `AuditEntry`, exactly like the triage approve flow.
+
+### Fixtures
+- `intakeRules.ts`: 3–4 of the practice's own intake criteria. **Hero rule (clinician-sourced, 2026-06-20):** *"Suspected-cancer referral requires the requisite bloodwork AND a CT enclosed — without them the specialist appointment is wasted → needs_info."* Plus 1–2 supporting rules (e.g. *"specialist referral requires a reason for referral"*, and one human-gated *decline_redirect* for clearly out-of-scope).
+- **Hero fixture (build first):** ONE urgent inbound referral — suspected-cancer / 2-week-wait pathway — **missing the required imaging** → `needs_info`, draft a same-day request to the referrer. Bury it in the 150-pile so triage surfaces it.
+- Optional, only if time: one clean **Accept**. Keep any `decline_redirect` clearly a *recommendation*, human-gated, never auto-acted.
+
+### Demo beat (append after the deep-thread beat)
+> "And here's the part nobody has solved." Point to an **urgent** inbound referral the triage surfaced. AI: **"Referral — NEEDS INFO: suspected-cancer pathway. The requisite bloodwork and CT aren't enclosed — without them the specialist visit is wasted. Drafted a same-day request to the referring office."** Show the intake rule it applied. One click sends it. *"Without this, the patient travels, waits weeks, and gets turned away to redo the workup — 10 days lost on a cancer pathway. Caught the day it arrives instead. And the rule it checked is the high-level filter a clinician gave us in five minutes — the product makes these explicit, and they compound. That's the context a base model doesn't have. That's the moat."* → clinical importance (patient harm) + feasibility + trajectory.
+
+### Self-learning loop (roadmap + one cheap demo gesture)
+The compounding vision: the system gets smarter at each practice as it's used. Three loops, by safety/feasibility:
+- **(a) Human-ratified rule capture — safe, real, demoable now.** Every clinician override/edit is a labeled correction; the AI proposes *"Add this as an intake rule?"*, the clinician ratifies, it joins `intakeRules`. The `AuditEntry` override log is already this training signal — for free. Intelligence surfaces the rule; authority stays human. Auditable, not a black box.
+- **(b) Outcome feedback — real ML, ~12-month.** A "likely accept" that gets declined is a labeled outcome; over volume you learn which features predict a bounce. Needs data infra + the rejection signal + cold-start patience.
+- **(c) Cross-practice / federated — network effect, governance-heavy.** Rules learned at one practice seed others; privacy/consent/governance hit immediately.
+
+**Trust rule (say to clinician judges):** never "self-mutating clinical AI" (a validation/regulatory nightmare that trips the black-box alarm). Always: **observes decisions → proposes explicit rules → human ratifies.** The system learns; the logic stays explicit and human-owned.
+
+**Why a base LLM can't just do this:** it lacks your practice's accumulated, *ratified* intake corrections. That explicit, compounding, human-owned rule set is the moat — not the model.
+
+**Optional demo gesture (~15–20 min, ONLY after the hero is solid):** after a clinician approves/overrides a referral disposition, show *"Add this as an intake rule?"* → it appears in a visible rules list. Makes "the system learns" tangible and honest with zero ML. Respect the cut-line.
+
+### Build order + cut-line (~90 min, rehearse before 5:30)
+1. `intakeRules.ts` fixture + `types.ts` additions.
+2. `assessReferral()` deterministic + 2–3 unit tests (keep the spine green).
+3. Disposition badge + wire the assessment into the existing right panel (reuse, don't rebuild).
+4. 2 inbound referral fixtures in the pile.
+5. **Cut-line T-45min:** stop. Rehearse. **Minimum lovable version** if short: ONE inbound referral + a "Needs info" badge + the intake-rule evidence + a drafted request-for-info. That alone lands the beat.
+
+### The assignment (do now, high-leverage)
+Grab a clinician SME for 5 minutes and get **2–3 real intake criteria** that make *their* office bounce an inbound referral (missing test, out of catchment, out of scope). Put their exact words into `intakeRules.ts`. Authentic rules, a second quotable pitch line, and it deepens the co-design story.
+
+**Status: design approved (Approach A, inbound). Additive, demoable, lives inside the inbox you already built — triage hero untouched.**

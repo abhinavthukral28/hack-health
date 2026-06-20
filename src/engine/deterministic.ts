@@ -47,7 +47,9 @@ const hasWord = (msg: InboxMessage, ...words: string[]): boolean => {
 export const RULES: Rule[] = [
   {
     id: 'critical-value',
-    match: (m) => has(m, 'critical high', 'critical low', 'critical value', 'critical result'),
+    match: (m) =>
+      Boolean(m.labReport?.some((r) => r.flag === 'critical')) ||
+      has(m, 'critical high', 'critical low', 'critical value', 'critical result'),
     criticality: 'critical',
     confidence: 'high',
     rationale: 'Lab flagged CRITICAL by the lab — value breaches a critical threshold. Exact threshold breach = high confidence.',
@@ -69,7 +71,13 @@ export const RULES: Rule[] = [
   },
   {
     id: 'abnormal-lab',
-    match: (m) => m.type === 'lab' && has(m, '(h)', 'high', '(l)', 'low', 'abnormal', 'above target'),
+    // Prefer the structured lab flags. Do NOT substring-match bare 'high'/'low':
+    // 'low' is a substring of 'follow', which would misclassify any lab whose
+    // text mentions "follow-up". Fall back to precise flag tokens only.
+    match: (m) =>
+      m.type === 'lab' &&
+      (Boolean(m.labReport?.some((r) => r.flag === 'high' || r.flag === 'low')) ||
+        has(m, '(h)', '(l)', 'abnormal', 'above target')),
     criticality: 'today',
     confidence: 'high',
     rationale: 'Abnormal lab value (flagged H/L) but not a critical threshold — review today.',
@@ -128,7 +136,7 @@ const FALLBACK_RULE = {
   rationale: 'Could not be parsed/classified (e.g. unreadable or partial transmission). Routed to Needs review rather than guessed — never crash.',
 };
 
-const KNOWN_TYPES: InboxMessage['type'][] = ['lab', 'specialist_report', 'hospital_report', 'fax_form', 'refill'];
+const KNOWN_TYPES: InboxMessage['type'][] = ['lab', 'specialist_report', 'hospital_report', 'fax_form', 'refill', 'referral_in'];
 
 // Explicit unreadable detection routes to needs_review even if a stray keyword hits.
 const isUnreadable = (m: InboxMessage): boolean =>
@@ -153,6 +161,18 @@ function summarize(msg: InboxMessage, criticality: Criticality): string {
   }
 }
 
+// The single most salient abnormal value in a message (critical first, then
+// any H/L flag), used to make the deep-thread drafts reference the actual
+// finding rather than generic boilerplate. Undefined when there's no lab table.
+function salientFinding(message: InboxMessage): string | undefined {
+  const rows = message.labReport;
+  if (!rows?.length) return undefined;
+  const pick =
+    rows.find((r) => r.flag === 'critical') ??
+    rows.find((r) => r.flag === 'high' || r.flag === 'low');
+  return pick ? `${pick.test} ${pick.result} (ref ${pick.ref})` : undefined;
+}
+
 // Letterhead organization per message type — makes each opened file read like a
 // real document from a real source.
 const ORG_BY_TYPE: Record<InboxMessage['type'], { org: string; orgMeta: string }> = {
@@ -161,6 +181,7 @@ const ORG_BY_TYPE: Record<InboxMessage['type'], { org: string; orgMeta: string }
   hospital_report: { org: 'The Ottawa Hospital', orgMeta: '1053 Carling Ave, Ottawa ON' },
   fax_form: { org: 'Incoming Fax', orgMeta: 'Document management' },
   refill: { org: 'Community Pharmacy', orgMeta: 'Rx renewal request' },
+  referral_in: { org: 'Inbound Referral', orgMeta: 'Referral intake' },
 };
 
 const fmtDate = (iso: string) =>
@@ -294,17 +315,22 @@ export const deterministicEngine: AiEngine = {
   // so the interface is complete and unit-testable now.
   analyze(message: InboxMessage, patient: Patient): Suggestion {
     const rule = classify(message);
+    const finding = salientFinding(message);
+    const first = patient.name.split(' ')[0];
+    const med = patient.medications[0];
     const actions: ProposedAction[] = [
       {
         type: 'patient_message',
         label: 'Draft patient message',
-        draft: `Hello ${patient.name.split(' ')[0]}, your recent results need a quick follow-up. Please book an appointment so we can review and adjust your care. — Your care team`,
+        draft: finding
+          ? `Hello ${first}, we've reviewed your recent results and one value needs a quick follow-up (${finding}). Please book an appointment so we can review it together and adjust your care if needed. — Your care team`
+          : `Hello ${first}, your recent results need a quick follow-up. Please book an appointment so we can review and adjust your care. — Your care team`,
         requiresApproval: true,
       },
       {
         type: 'followup_task',
         label: 'Create follow-up task',
-        draft: `Review ${message.subject} for ${patient.name}; reconcile against active meds (${patient.medications[0]}).`,
+        draft: `Review ${message.subject}${finding ? ` — ${finding}` : ''} for ${patient.name}; reconcile against active meds${med ? ` (${med})` : ''}.`,
         requiresApproval: true,
       },
     ];

@@ -3,7 +3,7 @@ import type { TriagedMessage, Criticality } from '../types';
 import { BucketGroup } from './BucketGroup';
 import { BUCKETS } from './criticality';
 
-type Filter = Criticality | 'all';
+type Filter = Criticality | 'all' | 'referrals';
 
 // The AI-triaged view: a KPI summary strip (counts per bucket, click to filter)
 // over the stratified message list. Data-dense but calm — color lives in the
@@ -22,7 +22,14 @@ export function TriagedInbox({
   // Headline counts exclude collapsed duplicates.
   const count = (k: Criticality) => triaged.filter((t) => t.criticality === k && !t.duplicateOf).length;
   const total = triaged.filter((t) => !t.duplicateOf).length;
-  const visibleBuckets = BUCKETS.filter((b) => (filter === 'all' || filter === b.key) && count(b.key) > 0);
+  // Inbound referrals are a separate axis (disposition, not acuity) — let the
+  // clinician filter the pile to just referrals from the top row.
+  const referralCount = triaged.filter((t) => t.message.type === 'referral_in' && !t.duplicateOf).length;
+  const bucketItems = (k: Criticality) =>
+    triaged.filter((t) => t.criticality === k && (filter !== 'referrals' || t.message.type === 'referral_in'));
+  const visibleBuckets = BUCKETS.filter((b) =>
+    filter === 'referrals' ? bucketItems(b.key).length > 0 : (filter === 'all' || filter === b.key) && count(b.key) > 0,
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -47,6 +54,16 @@ export function TriagedInbox({
             onClick={() => setFilter((f) => (f === b.key ? 'all' : b.key))}
           />
         ))}
+        {referralCount > 0 && (
+          <KpiChip
+            label="Referrals"
+            n={referralCount}
+            active={filter === 'referrals'}
+            dot="bg-indigo-600"
+            activeRing="ring-indigo-500"
+            onClick={() => setFilter((f) => (f === 'referrals' ? 'all' : 'referrals'))}
+          />
+        )}
       </div>
 
       {/* Stratified list */}
@@ -55,7 +72,7 @@ export function TriagedInbox({
           <BucketGroup
             key={b.key}
             criticality={b.key}
-            items={triaged.filter((t) => t.criticality === b.key)}
+            items={bucketItems(b.key)}
             selectedId={selectedId}
             onSelect={onSelect}
           />

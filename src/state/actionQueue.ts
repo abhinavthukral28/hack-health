@@ -60,7 +60,11 @@ export function approveSuggestion(
     const edited =
       original !== undefined && original.draft.trim() !== action.draft.trim();
 
-    if (action.type === 'followup_task') {
+    if (
+      action.type === 'followup_task' ||
+      action.type === 'request_info' ||
+      action.type === 'decline_redirect'
+    ) {
       tasks.push(makeTask(suggestion, action));
     }
 
