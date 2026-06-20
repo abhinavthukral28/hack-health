@@ -54,9 +54,10 @@ function initialState(): AppState {
     audit: [],
     actionStatus: {},
     notes: {},
-    // AI triage starts OFF so the demo opens on the raw inbox ("before"), then
-    // the presenter flips it ON to reveal the stratified queue ("after").
-    settings: { aiTriageOn: false, liveAI: false, doNotInterrupt: false },
+    // AI triage defaults ON so judges/evaluators see the stratified value on load
+    // without hunting for the toggle. Flip it OFF to show the raw "before" inbox
+    // during a live before/after reveal.
+    settings: { aiTriageOn: true, liveAI: false, doNotInterrupt: false },
     selectedMessageId: null,
     practiceRules: intakeRules.map((r) => r.label),
   };
