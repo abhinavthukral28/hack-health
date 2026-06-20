@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+*.tsbuildinfo
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Raw downloaded datasets stay out of git; only curated fixtures are committed.
+data/raw/
+.gstack/

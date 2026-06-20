@@ -1,0 +1,131 @@
+import type { InboxMessage } from '../types';
+
+// ~11 curated synthetic messages shaped from MTSamples-style medical text.
+// Committed as fixtures; they re-seed identically on every load (demo-day rule:
+// browser refresh resets to the same pile).
+//
+// The pile is intentionally mixed (labs, consults, hospital reports, faxes,
+// refills) with the one critical result buried in the middle — that's the
+// "message 149" the SME described. Includes a near-duplicate pair (msg-lab-k +
+// msg-lab-k-dup) so dedupe visibly collapses them.
+
+export const messages: InboxMessage[] = [
+  {
+    id: 'msg-consult-derm',
+    type: 'specialist_report',
+    receivedAt: '2026-06-20T07:42:00',
+    patientId: 'pt-2271',
+    subject: 'Dermatology consult note — benign nevus, routine',
+    body: 'Patient seen for pigmented lesion left forearm. Benign appearance, dermoscopy reassuring. No biopsy required. Routine follow-up PRN.',
+    raw: 'DERMATOLOGY CONSULTATION\nReason: pigmented lesion, L forearm.\nExam: 4mm symmetric pigmented macule, regular border, uniform color. Dermoscopy: benign network.\nImpression: benign melanocytic nevus.\nPlan: reassurance, return PRN if change.',
+  },
+  {
+    id: 'msg-refill-statin',
+    type: 'refill',
+    receivedAt: '2026-06-20T08:03:00',
+    patientId: 'pt-4410',
+    subject: 'Pharmacy refill request — atorvastatin 40mg',
+    body: 'Shoppers Drug Mart requesting refill authorization, atorvastatin 40 mg, 90-day supply. Last filled 88 days ago. Patient stable.',
+    raw: 'RX RENEWAL REQUEST\nDrug: Atorvastatin 40 mg tab\nQty: 90  Repeats: 3\nLast dispensed: 2026-03-24\nPrescriber on file: yes',
+  },
+  {
+    id: 'msg-lab-k',
+    type: 'lab',
+    receivedAt: '2026-06-20T08:15:00',
+    patientId: 'pt-synthea-001',
+    subject: 'LAB RESULT — Electrolyte panel (CRITICAL flag)',
+    body: 'Serum potassium 6.8 mmol/L — flagged CRITICAL HIGH. Creatinine 168 µmol/L (H). Collected 2026-06-20 06:40.',
+    raw: [
+      'CHEMISTRY — CRITICAL RESULT NOTIFICATION',
+      'Patient: Chen, Margaret   DOB: 1951-03-14',
+      'Collected: 2026-06-20 06:40   Reported: 2026-06-20 08:14',
+      '------------------------------------------',
+      'Test            Result      Ref Range      Flag',
+      'Potassium       6.8 mmol/L  3.5–5.1        **CRITICAL HIGH**',
+      'Sodium          138 mmol/L  135–145',
+      'Creatinine      168 µmol/L  44–106         HIGH',
+      'eGFR            34          >60            LOW',
+      '------------------------------------------',
+      'CRITICAL VALUE — notify ordering provider.',
+    ].join('\n'),
+    dedupeKey: 'chen-k-2026-06-20',
+  },
+  {
+    id: 'msg-lab-k-dup',
+    type: 'lab',
+    receivedAt: '2026-06-20T08:31:00',
+    patientId: 'pt-synthea-001',
+    subject: 'CORRECTED REPORT — Electrolyte panel (potassium)',
+    body: 'Corrected report re-issued by lab (demographic typo fixed). Potassium 6.8 mmol/L CRITICAL HIGH — unchanged result for same collection 06:40.',
+    raw: [
+      'CHEMISTRY — CORRECTED REPORT',
+      'Reason for correction: patient MRN typo. Result UNCHANGED.',
+      'Potassium 6.8 mmol/L  Ref 3.5–5.1  **CRITICAL HIGH**',
+      'Same collection: 2026-06-20 06:40',
+    ].join('\n'),
+    dedupeKey: 'chen-k-2026-06-20',
+  },
+  {
+    id: 'msg-hosp-ed',
+    type: 'hospital_report',
+    receivedAt: '2026-06-20T08:48:00',
+    patientId: 'pt-3098',
+    subject: 'ED DISCHARGE summary — chest pain, STAT cardiology f/u advised',
+    body: 'Patient discharged from Emergency after chest pain workup. Troponin negative x2. Advised STAT outpatient cardiology follow-up within 48h. GP to arrange.',
+    raw: 'EMERGENCY DEPARTMENT DISCHARGE\nPresentation: atypical chest pain.\nWorkup: ECG NSR, troponin neg x2, CXR clear.\nDisposition: discharged home.\nFollow-up: STAT cardiology referral within 48 hours — GP to arrange. Return if recurrence.',
+  },
+  {
+    id: 'msg-lab-hba1c',
+    type: 'lab',
+    receivedAt: '2026-06-20T09:05:00',
+    patientId: 'pt-synthea-001',
+    subject: 'LAB RESULT — HbA1c 8.2% (High)',
+    body: 'HbA1c 8.2% (H). Above target for this patient. Not an urgent result; consider diabetes management review.',
+    raw: 'HEMATOLOGY/CHEMISTRY\nHbA1c  8.2 %  Ref <7.0 (target)  HIGH\nCollected 2026-06-18.',
+  },
+  {
+    id: 'msg-imaging-cxr',
+    type: 'hospital_report',
+    receivedAt: '2026-06-20T09:20:00',
+    patientId: 'pt-5521',
+    subject: 'Radiology — CXR, incidental 6mm nodule noted',
+    body: 'Chest x-ray for cough. Incidental 6mm right upper lobe nodule. Radiologist recommends interval CT follow-up per Fleischner. Not urgent but requires action.',
+    raw: 'RADIOLOGY REPORT — Chest X-ray PA/Lat\nIndication: cough x3 weeks.\nFindings: lungs clear except 6mm RUL nodule. No effusion.\nImpression: incidental 6mm nodule. Recommend CT follow-up per Fleischner criteria.',
+  },
+  {
+    id: 'msg-lab-cbc',
+    type: 'lab',
+    receivedAt: '2026-06-20T09:33:00',
+    patientId: 'pt-4410',
+    subject: 'LAB RESULT — CBC, all within normal limits',
+    body: 'Complete blood count normal. WBC 6.2, Hgb 138, Plt 245. No action required.',
+    raw: 'CBC\nWBC 6.2 (4–11)\nHgb 138 (130–170)\nPlatelets 245 (150–400)\nAll within normal limits.',
+  },
+  {
+    id: 'msg-fax-form',
+    type: 'fax_form',
+    receivedAt: '2026-06-20T09:51:00',
+    patientId: 'pt-2271',
+    subject: 'Fax — disability tax credit form, signature requested',
+    body: 'Patient requesting completion of CRA disability tax credit certificate (T2201). Non-urgent administrative form.',
+    raw: 'INCOMING FAX\nForm: T2201 Disability Tax Credit Certificate\nAction: physician section + signature requested.\nUrgency: routine.',
+  },
+  {
+    id: 'msg-consult-cards',
+    type: 'specialist_report',
+    receivedAt: '2026-06-20T10:07:00',
+    patientId: 'pt-3098',
+    subject: 'Cardiology consult note — med titration recommended',
+    body: 'Cardiology reviewed HFpEF patient. Recommends GP up-titrate diuretic and recheck electrolytes in 1 week. Routine clinic follow-up.',
+    raw: 'CARDIOLOGY CONSULTATION\nImpression: HFpEF, stable.\nRecommendations: up-titrate diuretic, recheck lytes/renal in 1 week, BP target <130/80. Routine GP follow-up.',
+  },
+  {
+    id: 'msg-fax-garbled',
+    type: 'fax_form',
+    receivedAt: '2026-06-20T10:14:00',
+    patientId: 'unknown',
+    subject: 'Fax — partial / unreadable transmission',
+    body: '…page 1 of 3 received… [remainder of transmission illegible] …patient name truncated…',
+    raw: 'INCOMING FAX — TRANSMISSION ERROR\nPages received: 1 of 3.\nOCR confidence low. Patient identifiers not parseable.',
+  },
+];
