@@ -2,6 +2,8 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 // Dev-only LLM proxy via OpenRouter. Holds the API key SERVER-SIDE so it is
 // never bundled into client code. Handles POST /api/claude:
 //   - no key            => 503 {error:'no key'}      (client silently falls back)
@@ -121,6 +123,6 @@ function claudeProxyPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), claudeProxyPlugin()],
+  plugins: [react(), claudeProxyPlugin(), cloudflare()],
   server: { port: 5173 },
 });

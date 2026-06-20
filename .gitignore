@@ -16,3 +16,8 @@ data/raw/
 compass-*.png
 referral*.png
 .gstack/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
