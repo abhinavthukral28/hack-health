@@ -61,7 +61,6 @@ npm run build      # tsc + production build → dist/
 
 | File | What it is |
 |---|---|
-| **[`SUBMISSION.md`](SUBMISSION.md)** | The full pitch kit — written submission, 3-minute presentation script, 60-second video-demo script, defensibility Q&A, and the judging-criteria map. |
 | **[`DESIGN.md`](DESIGN.md)** | The design + build journey: clinician interviews, the locked architecture, the referral-intelligence spec, and the self-learning roadmap. |
 | `src/engine/` | The deterministic triage + referral intake-rule engines (with tests). |
 | `src/components/` | The embedded EMR shell, the triaged inbox, and the evidence/approval panel. |
