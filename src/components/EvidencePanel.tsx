@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { TriagedMessage, EvidenceRef } from '../types';
 import { ConfidenceBadge } from './TriageBadge';
 import { bucketConfig } from './criticality';
+import { DocumentModal } from './DocumentModal';
 
 const SOURCE_ICON: Record<EvidenceRef['sourceType'], string> = {
   lab: '🧪',
@@ -9,25 +11,40 @@ const SOURCE_ICON: Record<EvidenceRef['sourceType'], string> = {
   dpd: '💊',
 };
 
-function EvidenceCard({ ev }: { ev: EvidenceRef }) {
+// One source = one openable file. Shows a 2-line preview; "Open file" launches
+// the full document so the clinician verifies the real source, not a snippet.
+function EvidenceCard({ ev, onOpen }: { ev: EvidenceRef; onOpen: () => void }) {
   return (
-    <details open className="rounded-lg border border-slate-200 bg-white">
-      <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-800">
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <div className="flex items-center gap-2 px-3 py-2">
         <span>{SOURCE_ICON[ev.sourceType]}</span>
-        <span className="flex-1">{ev.label}</span>
-        <span className="text-xs font-normal text-slate-400">tap to verify</span>
-      </summary>
-      <div className="border-t border-slate-100 px-3 py-2">
-        <div className="mb-1 text-xs font-medium text-slate-500">{ev.value}</div>
-        <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-slate-50 p-2 font-mono text-xs leading-relaxed text-slate-700">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-slate-800">{ev.label}</div>
+          <div className="truncate text-xs text-slate-500">{ev.value}</div>
+        </div>
+        <button
+          onClick={onOpen}
+          className="shrink-0 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-700"
+        >
+          Open file →
+        </button>
+      </div>
+      <button
+        onClick={onOpen}
+        className="block w-full border-t border-slate-100 px-3 py-2 text-left"
+        title="Open the full source document"
+      >
+        <pre className="line-clamp-2 overflow-hidden whitespace-pre-wrap font-mono text-xs leading-relaxed text-slate-500">
 {ev.snippet}
         </pre>
-      </div>
-    </details>
+        <span className="mt-1 inline-block text-[11px] font-medium text-slate-400">tap to verify the full document</span>
+      </button>
+    </div>
   );
 }
 
 export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
+  const [openDoc, setOpenDoc] = useState<EvidenceRef | null>(null);
   if (!triaged) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center text-slate-400">
@@ -71,11 +88,13 @@ export function EvidencePanel({ triaged }: { triaged: TriagedMessage | null }) {
           </div>
           <div className="space-y-2">
             {triaged.evidence.map((ev, i) => (
-              <EvidenceCard key={i} ev={ev} />
+              <EvidenceCard key={i} ev={ev} onOpen={() => setOpenDoc(ev)} />
             ))}
           </div>
         </div>
       </div>
+
+      <DocumentModal ev={openDoc} onClose={() => setOpenDoc(null)} />
     </div>
   );
 }

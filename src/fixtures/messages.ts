@@ -48,6 +48,12 @@ export const messages: InboxMessage[] = [
       '------------------------------------------',
       'CRITICAL VALUE — notify ordering provider.',
     ].join('\n'),
+    labReport: [
+      { test: 'Potassium', result: '6.8 mmol/L', ref: '3.5 – 5.1', flag: 'critical' },
+      { test: 'Sodium', result: '138 mmol/L', ref: '135 – 145', flag: '' },
+      { test: 'Creatinine', result: '168 µmol/L', ref: '44 – 106', flag: 'high' },
+      { test: 'eGFR', result: '34 mL/min/1.73m²', ref: '> 60', flag: 'low' },
+    ],
     dedupeKey: 'chen-k-2026-06-20',
   },
   {
@@ -82,6 +88,10 @@ export const messages: InboxMessage[] = [
     subject: 'LAB RESULT — HbA1c 8.2% (High)',
     body: 'HbA1c 8.2% (H). Above target for this patient. Not an urgent result; consider diabetes management review.',
     raw: 'HEMATOLOGY/CHEMISTRY\nHbA1c  8.2 %  Ref <7.0 (target)  HIGH\nCollected 2026-06-18.',
+    labReport: [
+      { test: 'Hemoglobin A1c', result: '8.2 %', ref: '< 7.0 (target)', flag: 'high' },
+      { test: 'Est. avg glucose', result: '10.7 mmol/L', ref: '< 8.6', flag: 'high' },
+    ],
   },
   {
     id: 'msg-imaging-cxr',
@@ -100,6 +110,11 @@ export const messages: InboxMessage[] = [
     subject: 'LAB RESULT — CBC, all within normal limits',
     body: 'Complete blood count normal. WBC 6.2, Hgb 138, Plt 245. No action required.',
     raw: 'CBC\nWBC 6.2 (4–11)\nHgb 138 (130–170)\nPlatelets 245 (150–400)\nAll within normal limits.',
+    labReport: [
+      { test: 'WBC', result: '6.2 ×10⁹/L', ref: '4.0 – 11.0', flag: '' },
+      { test: 'Hemoglobin', result: '138 g/L', ref: '130 – 170', flag: '' },
+      { test: 'Platelets', result: '245 ×10⁹/L', ref: '150 – 400', flag: '' },
+    ],
   },
   {
     id: 'msg-fax-form',

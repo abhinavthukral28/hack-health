@@ -22,7 +22,30 @@ export interface InboxMessage {
   subject: string;
   body: string;
   raw?: string; // raw source doc (lab table text, consult note) for the evidence panel
+  labReport?: LabRow[]; // structured result rows so labs render as a real report table
   dedupeKey?: string; // messages sharing a key are near-duplicates
+}
+
+// A structured source document so the evidence opens like a real PDF, not a
+// text box — letterhead, demographics, a results table, etc.
+export interface LabRow {
+  test: string;
+  result: string;
+  ref: string;
+  flag?: 'critical' | 'high' | 'low' | '';
+}
+
+export interface ClinicalDocument {
+  kind: 'lab' | 'note' | 'record';
+  org: string; // letterhead organization
+  orgMeta?: string; // address / accreditation line
+  docTitle: string;
+  patient?: { name: string; dob: string; mrn?: string };
+  meta?: { label: string; value: string }[]; // collected / reported / ordering provider
+  labRows?: LabRow[]; // for kind: 'lab'
+  bodyText?: string; // for kind: 'note'
+  list?: string[]; // for kind: 'record' (med list, problem list)
+  footer?: string;
 }
 
 // powers tap-to-source — the SME's trust unlock
@@ -31,6 +54,7 @@ export interface EvidenceRef {
   sourceType: 'lab' | 'note' | 'fhir' | 'dpd';
   value: string;
   snippet: string;
+  doc?: ClinicalDocument; // structured form rendered in the PDF viewer
 }
 
 export interface TriagedMessage {

@@ -10,4 +10,8 @@ dist-ssr
 
 # Raw downloaded datasets stay out of git; only curated fixtures are committed.
 data/raw/
+
+# Throwaway browser/QA artifacts
+.playwright-mcp/
+compass-*.png
 .gstack/

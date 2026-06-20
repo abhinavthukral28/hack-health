@@ -8,6 +8,7 @@ import type {
   Criticality,
   Confidence,
   EvidenceRef,
+  ClinicalDocument,
   Suggestion,
   ProposedAction,
 } from '../types';
@@ -120,6 +121,59 @@ function summarize(msg: InboxMessage, criticality: Criticality): string {
   }
 }
 
+// Letterhead organization per message type — makes each opened file read like a
+// real document from a real source.
+const ORG_BY_TYPE: Record<InboxMessage['type'], { org: string; orgMeta: string }> = {
+  lab: { org: 'Eastern Ontario Regional Laboratory', orgMeta: '501 Smyth Rd, Ottawa ON · Accredited by IQMH' },
+  specialist_report: { org: 'Specialist Consultation', orgMeta: 'Faxed to referring provider' },
+  hospital_report: { org: 'The Ottawa Hospital', orgMeta: '1053 Carling Ave, Ottawa ON' },
+  fax_form: { org: 'Incoming Fax', orgMeta: 'Document management' },
+  refill: { org: 'Community Pharmacy', orgMeta: 'Rx renewal request' },
+};
+
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleString('en-CA', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+// Build the structured "source document" so Open file renders a real-looking page.
+function buildSourceDoc(msg: InboxMessage, patient: Patient): ClinicalDocument {
+  const org = ORG_BY_TYPE[msg.type];
+  const isBackbone = msg.patientId === patient.id;
+  const demographics = isBackbone
+    ? { name: patient.name, dob: patient.dob, mrn: patient.id }
+    : { name: 'Synthetic Patient', dob: '—', mrn: msg.patientId };
+
+  if (msg.type === 'lab' && msg.labReport) {
+    return {
+      kind: 'lab',
+      org: org.org,
+      orgMeta: org.orgMeta,
+      docTitle: 'Laboratory Report',
+      patient: demographics,
+      meta: [
+        { label: 'Reported', value: fmtDate(msg.receivedAt) },
+        { label: 'Ordering provider', value: 'Dr. A. Okafor, MD' },
+        { label: 'Specimen', value: 'Serum / whole blood' },
+      ],
+      labRows: msg.labReport,
+      footer:
+        msg.labReport.some((r) => r.flag === 'critical')
+          ? 'CRITICAL VALUE — telephoned to ordering provider per lab protocol. Synthetic data, not a real patient.'
+          : 'Synthetic data — not a real patient.',
+    };
+  }
+
+  return {
+    kind: 'note',
+    org: org.org,
+    orgMeta: org.orgMeta,
+    docTitle: msg.subject,
+    patient: demographics,
+    meta: [{ label: 'Received', value: fmtDate(msg.receivedAt) }],
+    bodyText: msg.raw ?? msg.body,
+    footer: 'Synthetic data — not a real patient.',
+  };
+}
+
 // Evidence = the actual source document inline, plus patient context when the
 // message is about our backbone patient (powers tap-to-source, the trust unlock).
 function buildEvidence(msg: InboxMessage, patient: Patient): EvidenceRef[] {
@@ -131,6 +185,7 @@ function buildEvidence(msg: InboxMessage, patient: Patient): EvidenceRef[] {
       sourceType: msg.type === 'lab' ? 'lab' : 'note',
       value: msg.subject,
       snippet: msg.raw,
+      doc: buildSourceDoc(msg, patient),
     });
   }
 
@@ -143,12 +198,30 @@ function buildEvidence(msg: InboxMessage, patient: Patient): EvidenceRef[] {
       sourceType: 'fhir',
       value: `${patient.name} — active meds`,
       snippet: patient.medications.join('\n'),
+      doc: {
+        kind: 'record',
+        org: 'COMPASS EMR — Patient Chart',
+        orgMeta: 'Medication profile',
+        docTitle: 'Active Medications',
+        patient: { name: patient.name, dob: patient.dob, mrn: patient.id },
+        list: patient.medications,
+        footer: 'Synthetic data — not a real patient.',
+      },
     });
     ev.push({
       label: 'Active problems',
       sourceType: 'fhir',
       value: `${patient.name} — problem list`,
       snippet: patient.problems.join('\n'),
+      doc: {
+        kind: 'record',
+        org: 'COMPASS EMR — Patient Chart',
+        orgMeta: 'Problem list',
+        docTitle: 'Active Problems',
+        patient: { name: patient.name, dob: patient.dob, mrn: patient.id },
+        list: patient.problems,
+        footer: 'Synthetic data — not a real patient.',
+      },
     });
   }
 
