@@ -16,7 +16,7 @@ export function AiTriageToggle() {
       aria-pressed={on}
     >
       <span aria-hidden>✦</span>
-      <span>AI Triage</span>
+      <span>Fast Triage</span>
       <span
         className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
           on ? 'bg-white/30' : 'bg-slate-200'

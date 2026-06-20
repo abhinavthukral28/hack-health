@@ -12,8 +12,8 @@ import { messages } from '../fixtures/messages';
 
 type Module = 'inbox' | 'tasks';
 
-// Generic Canadian primary-care EMR (host = MapleChart). FirstPass is demoted to
-// an embedded AI panel ("FirstPass — AI triage layer"), not a separate product.
+// Generic Canadian primary-care EMR (host = MapleChart). Fast Triage is demoted to
+// an embedded AI panel ("Fast Triage — AI inbox layer"), not a separate product.
 // The doctor should feel "my inbox got an AI panel," not "I opened a new app."
 const CLINIC = 'Rideau Valley Family Health Team';
 const PROVIDER = 'Dr. A. Okafor, MD CCFP';
@@ -159,10 +159,10 @@ export function EmrShell() {
           <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
               <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <Sparkles className="h-4 w-4 text-indigo-600" /> FirstPass
+                <Sparkles className="h-4 w-4 text-indigo-600" /> Fast Triage
               </span>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400">
-                AI triage layer
+                AI inbox layer
               </span>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -171,7 +171,7 @@ export function EmrShell() {
               ) : (
                 <div className="flex h-full flex-col items-center justify-center px-6 text-center">
                   <Sparkles className="h-8 w-8 text-slate-300" />
-                  <p className="mt-3 text-sm font-semibold text-slate-600">AI Triage is off</p>
+                  <p className="mt-3 text-sm font-semibold text-slate-600">Fast Triage is off</p>
                   <p className="mt-1 text-xs text-slate-400">
                     Turn it on to rank, dedupe and summarize today's {INBOX_TOTAL_TODAY} messages —
                     the critical ones rise to the top.
@@ -180,7 +180,7 @@ export function EmrShell() {
                     onClick={() => dispatch({ type: 'TOGGLE_AI_TRIAGE' })}
                     className="mt-4 rounded-full bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
                   >
-                    Turn on AI Triage
+                    Turn on Fast Triage
                   </button>
                 </div>
               )}
