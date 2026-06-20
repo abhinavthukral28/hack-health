@@ -12,8 +12,8 @@ import { messages } from '../fixtures/messages';
 
 type Module = 'inbox' | 'tasks';
 
-// Generic Canadian family-practice EMR. The product brand here is the *clinic's*
-// system — COMPASS is demoted to an embedded AI panel ("powered by COMPASS").
+// Generic Canadian primary-care EMR (host = MapleChart). FirstPass is demoted to
+// an embedded AI panel ("FirstPass — AI triage layer"), not a separate product.
 // The doctor should feel "my inbox got an AI panel," not "I opened a new app."
 const CLINIC = 'Rideau Valley Family Health Team';
 const PROVIDER = 'Dr. A. Okafor, MD CCFP';
@@ -159,10 +159,10 @@ export function EmrShell() {
           <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
               <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <Sparkles className="h-4 w-4 text-indigo-600" /> AI Triage
+                <Sparkles className="h-4 w-4 text-indigo-600" /> FirstPass
               </span>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400">
-                powered by COMPASS
+                AI triage layer
               </span>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">

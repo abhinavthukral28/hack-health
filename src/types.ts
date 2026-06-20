@@ -1,5 +1,5 @@
 // The shared contract — locked in the engineering review.
-// Every (future) COMPASS module emits this same shape, which is why the inbox
+// Every (future) FirstPass module emits this same shape, which is why the inbox
 // slice proves the whole spine.
 
 export type MessageType =

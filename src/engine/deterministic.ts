@@ -253,7 +253,7 @@ function buildEvidence(msg: InboxMessage, patient: Patient): EvidenceRef[] {
       snippet: patient.medications.join('\n'),
       doc: {
         kind: 'record',
-        org: 'COMPASS EMR — Patient Chart',
+        org: 'MapleChart — Patient Chart',
         orgMeta: 'Medication profile',
         docTitle: 'Active Medications',
         patient: { name: patient.name, dob: patient.dob, mrn: patient.id },
@@ -268,7 +268,7 @@ function buildEvidence(msg: InboxMessage, patient: Patient): EvidenceRef[] {
       snippet: patient.problems.join('\n'),
       doc: {
         kind: 'record',
-        org: 'COMPASS EMR — Patient Chart',
+        org: 'MapleChart — Patient Chart',
         orgMeta: 'Problem list',
         docTitle: 'Active Problems',
         patient: { name: patient.name, dob: patient.dob, mrn: patient.id },
